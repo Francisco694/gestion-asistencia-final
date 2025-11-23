@@ -3,186 +3,204 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generador de Datos V2 - UVENT</title>
+    <title>Carga Masiva de Asistentes - UVENT</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- FIREBASE (Versión Compat) -->
+    <script src="js/tailwind-config.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <!-- FIREBASE (Mismos scripts que el index para compatibilidad) -->
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics-compat.js"></script>
+    
+    <!-- Tu lógica de base de datos -->
+    <script src="js/firebase-config.js"></script>
+    <script src="js/db.js"></script>
 </head>
-<body class="bg-gray-900 text-white h-screen flex flex-col items-center justify-center p-4">
+<body class="bg-gray-100 text-gray-800 min-h-screen font-sans flex items-center justify-center p-6">
 
-    <div class="max-w-2xl w-full bg-gray-800 p-8 rounded-xl shadow-2xl text-center">
-        <h1 class="text-3xl font-bold mb-4 text-green-500">Instalador Robusto</h1>
-        <p class="text-gray-400 mb-8">Esta versión forzará la creación de datos incluso si la autenticación falla.</p>
-
-        <div id="status" class="mb-6 text-sm text-left bg-black p-4 rounded border border-gray-700 h-64 overflow-y-auto font-mono">
-            <span class="text-gray-500">> Listo. Pulsa el botón.</span>
+    <div class="max-w-4xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row">
+        
+        <!-- Panel Izquierdo: Instrucciones -->
+        <div class="w-full md:w-1/3 bg-brand-dark text-white p-8 flex flex-col justify-between">
+            <div>
+                <h1 class="text-3xl font-bold tracking-widest mb-2">UVENT</h1>
+                <p class="text-brand-green text-sm font-bold uppercase tracking-wider mb-8">Bulk Loader Tool</p>
+                
+                <div class="space-y-4 text-sm text-gray-300">
+                    <p><i class="fas fa-info-circle mr-2 text-brand-green"></i> <strong>Paso 1:</strong> Selecciona el evento al que quieres agregar gente.</p>
+                    <p><i class="fas fa-paste mr-2 text-brand-green"></i> <strong>Paso 2:</strong> Pega la lista de invitados.</p>
+                    <p><i class="fas fa-check-circle mr-2 text-brand-green"></i> <strong>Formato:</strong><br>
+                    <code class="bg-gray-800 px-2 py-1 rounded text-white block mt-1">Nombre Apellido, correo@email.com</code></p>
+                </div>
+            </div>
+            <div class="mt-8">
+                <a href="admin.html" class="text-sm text-gray-400 hover:text-white flex items-center gap-2 transition">
+                    <i class="fas fa-arrow-left"></i> Volver al Admin
+                </a>
+            </div>
         </div>
 
-        <button onclick="runSeeder()" id="btn-seed" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded transition shadow-lg transform hover:scale-[1.02]">
-            Forzar Instalación de Datos
-        </button>
-        
-        <a href="index.html" class="block mt-6 text-sm text-gray-400 hover:text-white underline">Ir al Inicio (index.html)</a>
+        <!-- Panel Derecho: Formulario -->
+        <div class="w-full md:w-2/3 p-8">
+            
+            <!-- Selección de Evento -->
+            <div class="mb-6">
+                <label class="block text-sm font-bold text-gray-700 mb-2">1. Seleccionar Evento Destino</label>
+                <div class="relative">
+                    <select id="eventSelect" class="block w-full border border-gray-300 rounded-lg p-3 pr-10 focus:ring-2 focus:ring-brand-green outline-none appearance-none bg-white cursor-pointer">
+                        <option value="">Cargando eventos...</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Área de Texto -->
+            <div class="mb-6">
+                <div class="flex justify-between items-end mb-2">
+                    <label class="block text-sm font-bold text-gray-700">2. Pegar Lista de Invitados</label>
+                    <button onclick="loadExample()" class="text-xs text-brand-green hover:underline">Cargar ejemplo</button>
+                </div>
+                <textarea id="csvInput" rows="8" class="w-full border border-gray-300 rounded-lg p-4 font-mono text-sm focus:ring-2 focus:ring-brand-green outline-none" placeholder="Juan Perez, juan@test.com&#10;Maria Soto, maria@test.com&#10;..."></textarea>
+                <p class="text-xs text-gray-400 mt-2 text-right" id="lineCount">0 líneas detectadas</p>
+            </div>
+
+            <!-- Botón y Progreso -->
+            <div>
+                <button id="btnProcess" onclick="processBulkLoad()" class="w-full bg-brand-green text-white font-bold py-4 rounded-lg shadow-lg hover:bg-opacity-90 transition transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fas fa-upload mr-2"></i> Procesar Lista
+                </button>
+                
+                <!-- Barra de Progreso (Oculta) -->
+                <div id="progressContainer" class="hidden mt-4">
+                    <div class="flex justify-between text-xs text-gray-500 mb-1">
+                        <span id="progressText">Procesando...</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="progressBar" class="bg-brand-green h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Log de Resultados -->
+                <div id="logContainer" class="hidden mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4 h-32 overflow-y-auto text-xs font-mono"></div>
+            </div>
+        </div>
     </div>
 
     <script>
-        // 1. TU CONFIGURACIÓN
-        const firebaseConfig = {
-            apiKey: "AIzaSyBl4ei2_fL9NPyBKIxkJDVGHcTPo9YjOiE",
-            authDomain: "uvent-db.firebaseapp.com",
-            projectId: "uvent-db",
-            storageBucket: "uvent-db.firebasestorage.app",
-            messagingSenderId: "418098128816",
-            appId: "1:418098128816:web:46fca8496fb02d07385875",
-            measurementId: "G-PV1LYTHWKR"
-        };
-
-        // 2. INICIALIZACIÓN
-        const app = firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-
-        // Utilidad de log visual
-        const log = (msg, type='info') => {
-            const el = document.getElementById('status');
-            let color = 'text-gray-300';
-            if (type === 'error') color = 'text-red-400';
-            if (type === 'success') color = 'text-green-400';
-            if (type === 'warning') color = 'text-yellow-400';
+        // Lógica específica de la herramienta
+        document.addEventListener('DOMContentLoaded', async () => {
+            const select = document.getElementById('eventSelect');
+            const textarea = document.getElementById('csvInput');
             
-            el.innerHTML += `<div class="${color} mb-1 border-b border-gray-800 pb-1">> ${msg}</div>`;
-            el.scrollTop = el.scrollHeight;
-        };
-
-        // Función auxiliar para generar IDs falsos si Auth falla
-        const generateFakeId = () => 'user_' + Math.random().toString(36).substr(2, 9);
-
-        // Función para crear usuarios con timeout
-        async function createUser(email, password, name, role) {
-            let uid = null;
-            
+            // 1. Cargar Eventos al Select
             try {
-                // Truco: Desactivar persistencia para evitar bloqueos en iframes
-                await auth.setPersistence(firebase.auth.Auth.Persistence.NONE);
-
-                // Promesa con timeout de 3 segundos
-                const authPromise = auth.createUserWithEmailAndPassword(email, password);
-                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000));
-
-                const userCredential = await Promise.race([authPromise, timeoutPromise]);
-                uid = userCredential.user.uid;
-                log(`[OK] Auth creado: ${email}`, 'success');
-
-            } catch (error) {
-                if (error.code === 'auth/email-already-in-use') {
-                    log(`[INFO] El usuario ${email} ya existe en Auth.`, 'warning');
-                    // Intentamos un login rápido para obtener el ID, si falla usamos uno falso
-                    try {
-                        const login = await auth.signInWithEmailAndPassword(email, password);
-                        uid = login.user.uid;
-                    } catch(e) { uid = generateFakeId(); }
+                // Usamos la función existente en db.js
+                const events = await getEventsDB({ status: 'approved' }); // Solo eventos aprobados
+                
+                select.innerHTML = '<option value="">-- Selecciona un evento --</option>';
+                if (events.length === 0) {
+                    select.innerHTML = '<option value="">No hay eventos aprobados disponibles</option>';
                 } else {
-                    log(`[WARN] Falló Auth (${error.message}). Usando ID simulado para Firestore.`, 'warning');
-                    uid = generateFakeId(); // Fallback crítico: Usar ID falso para que la BD no se quede vacía
+                    events.forEach(ev => {
+                        const option = document.createElement('option');
+                        option.value = ev.id;
+                        option.textContent = `${ev.name} (${ev.date})`;
+                        select.appendChild(option);
+                    });
                 }
+            } catch (e) {
+                console.error(e);
+                select.innerHTML = '<option value="">Error cargando eventos</option>';
             }
 
-            // Crear documento en Firestore (Esto es lo importante para que la web funcione)
-            try {
-                await db.collection("users").doc(uid).set({
-                    name: name,
-                    email: email,
-                    role: role,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                log(`[OK] Datos guardados en Firestore para: ${name}`, 'success');
-                return uid;
-            } catch (dbError) {
-                log(`[ERROR CRÍTICO] No se pudo escribir en BD: ${dbError.message}`, 'error');
-                return uid;
-            }
+            // Contador de líneas
+            textarea.addEventListener('input', () => {
+                const lines = textarea.value.split('\n').filter(line => line.trim() !== '').length;
+                document.getElementById('lineCount').textContent = `${lines} invitados detectados`;
+            });
+        });
+
+        function loadExample() {
+            const example = "Ana Torres, ana.torres@email.com\nCarlos Ruiz, cruiz@empresa.cl\nValentina Paz, valen.paz@uvent.cl\nRoberto Gomez, rgomez@mail.com\nSofia Loren, sloren@cine.com";
+            document.getElementById('csvInput').value = example;
+            document.getElementById('csvInput').dispatchEvent(new Event('input'));
         }
 
-        // Función para crear eventos
-        async function createEvent(data) {
-            try {
-                await db.collection("events").add({
-                    ...data,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                log(`[OK] Evento creado: ${data.name}`, 'success');
-            } catch (error) {
-                log(`[ERROR] Falló crear evento: ${error.message}`, 'error');
-            }
-        }
+        async function processBulkLoad() {
+            const eventId = document.getElementById('eventSelect').value;
+            const text = document.getElementById('csvInput').value;
+            const btn = document.getElementById('btnProcess');
+            const logDiv = document.getElementById('logContainer');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            
+            if (!eventId) return alert("Por favor selecciona un evento.");
+            if (!text.trim()) return alert("La lista está vacía.");
 
-        // PROCESO PRINCIPAL
-        async function runSeeder() {
-            const btn = document.getElementById('btn-seed');
+            // Preparar UI
             btn.disabled = true;
-            btn.innerText = "Trabajando...";
-            btn.className = "w-full bg-yellow-600 text-white font-bold py-3 rounded cursor-wait";
+            btn.innerText = "Procesando...";
+            logDiv.classList.remove('hidden');
+            logDiv.innerHTML = ''; // Limpiar log
+            progressContainer.classList.remove('hidden');
 
-            log("INICIANDO MODO FUERZA BRUTA...", 'warning');
+            // Parsear líneas
+            const lines = text.split('\n').filter(l => l.trim() !== '');
+            let successCount = 0;
+            let errorCount = 0;
 
-            // 1. CREAR ADMIN
-            log("--- Procesando Admin ---");
-            const adminId = await createUser("admin@uvent.cl", "Admin123", "Super Administrador", "admin");
-            
-            // 2. CREAR USUARIOS
-            log("--- Procesando Usuarios ---");
-            const juanId = await createUser("juan@uvent.cl", "User123", "Juan Pérez", "organizer");
-            await createUser("maria@uvent.cl", "User123", "María González", "organizer");
-            await createUser("pedro@uvent.cl", "User123", "Pedro Soto", "organizer");
-
-            // 3. CREAR EVENTOS
-            log("--- Creando Eventos ---");
-            // Usamos el ID del admin (real o falso) para asociar los eventos
-            const ownerId = adminId; 
-            
-            const commonData = {
-                organizerId: ownerId,
-                organizerEmail: "admin@uvent.cl",
-                status: "approved", // Aprobados para que se vean en el index
-                enrolledCount: 0,
-                capacity: 100,
-                location: "Av. Pedro de Valdivia Nº 0300, Temuco"
-            };
-
-            const events = [
-                { 
-                    name: "TicSur (Apertura)", 
-                    date: "2025-11-19", 
-                    time: "09:00",
-                    description: "Gran apertura de la conferencia tecnológica."
-                },
-                { 
-                    name: "TicSur (Workshops)", 
-                    date: "2025-11-20", 
-                    time: "14:00",
-                    description: "Talleres prácticos de IA y Ciberseguridad."
-                },
-                { 
-                    name: "TicSur (Clausura)", 
-                    date: "2025-11-21", 
-                    time: "18:00",
-                    description: "Cierre del evento y networking."
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                // Intentar separar por coma
+                const parts = line.split(',');
+                
+                if (parts.length < 2) {
+                    log(`[ERROR] Formato inválido en línea: "${line}"`, 'text-red-500');
+                    errorCount++;
+                    continue;
                 }
-            ];
 
-            for (let ev of events) {
-                await createEvent({ ...commonData, ...ev });
+                const name = parts[0].trim();
+                const email = parts[1].trim();
+
+                try {
+                    // Usamos la función de db.js para inscribir
+                    await enrollInEventDB(eventId, {
+                        name: name,
+                        email: email,
+                        source: 'bulk_load'
+                    });
+                    log(`[OK] Inscrito: ${name}`, 'text-green-600');
+                    successCount++;
+                } catch (e) {
+                    log(`[ERROR] Falló ${name}: ${e.message}`, 'text-red-500');
+                    errorCount++;
+                }
+
+                // Actualizar barra
+                const percent = Math.round(((i + 1) / lines.length) * 100);
+                progressBar.style.width = `${percent}%`;
+                document.getElementById('progressPercent').textContent = `${percent}%`;
             }
 
-            log("================================", 'success');
-            log("¡INSTALACIÓN FINALIZADA!", 'success');
-            
-            btn.innerText = "¡Ir a la Página Principal!";
-            btn.className = "w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded shadow-lg animate-pulse";
-            btn.onclick = () => window.location.href = 'index.html';
+            // Finalizar
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check"></i> Finalizado';
+            alert(`Proceso completado.\nCorrectos: ${successCount}\nErrores: ${errorCount}`);
+        }
+
+        function log(msg, colorClass = 'text-gray-600') {
+            const div = document.getElementById('logContainer');
+            const p = document.createElement('div');
+            p.className = `mb-1 ${colorClass}`;
+            p.textContent = msg;
+            div.appendChild(p);
+            div.scrollTop = div.scrollHeight;
         }
     </script>
 </body>

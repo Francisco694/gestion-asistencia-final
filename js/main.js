@@ -260,45 +260,59 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function openAdminEventModal(ev) {
-        const modal = document.getElementById('adminEventModal'); if(!modal) return;
-        currentAdminEventId = ev.id;
-        document.getElementById('adminModalTitle').textContent = ev.name;
-        document.getElementById('adminModalCount').textContent = ev.enrolledCount || 0;
-        document.getElementById('adminModalCapacity').textContent = ev.capacity || 0;
-        const p = ev.capacity > 0 ? Math.round(((ev.enrolledCount || 0) / ev.capacity) * 100) : 0;
-        document.getElementById('adminModalPercent').textContent = p + '%';
-        document.getElementById('adminModalProgressText').textContent = `${ev.enrolledCount || 0}/${ev.capacity}`;
-        document.getElementById('adminModalBar').style.width = `${p}%`;
+function openAdminEventModal(ev) {
+    const modal = document.getElementById('adminEventModal');
+    if (!modal) return;
 
-        const imgPreview = document.getElementById('adminEventImagePreview');
-        const urlInput = document.getElementById('adminEventImageUrl');
-        const fileInput = document.getElementById('adminEventImageFile');
-        const btnSave = document.getElementById('btnSaveImage');
+    currentAdminEventId = ev.id;
 
-        if(urlInput) {
-            urlInput.value = ev.image || ''; fileInput.value = '';
-            document.getElementById('adminEventImagePreview').src = ev.image || 'https://via.placeholder.com/300x200?text=Sin+Imagen';
-            btnSave.onclick = async () => {
-                const original = btnSave.innerHTML; btnSave.innerText = "Guardando..."; btnSave.disabled = true;
-                let finalImage = urlInput.value;
-                if (fileInput.files[0]) try { finalImage = await toBase64(fileInput.files[0]); } catch(e){}
-                if (finalImage) { await db.collection("events").doc(currentAdminEventId).update({image: finalImage}); alert("Imagen guardada"); loadAdminDashboard(); }
-                btnSave.innerHTML = original; btnSave.disabled = false;
-            };
+    document.getElementById('adminModalTitle').textContent = ev.name;
+    document.getElementById('adminModalCount').textContent = ev.enrolledCount || 0;
+    document.getElementById('adminModalCapacity').textContent = ev.capacity || 0;
+
+    const p = ev.capacity > 0 
+        ? Math.round(((ev.enrolledCount || 0) / ev.capacity) * 100) 
+        : 0;
+
+    document.getElementById('adminModalPercent').textContent = p + '%';
+    document.getElementById('adminModalProgressText').textContent =
+        `${ev.enrolledCount || 0}/${ev.capacity}`;
+    document.getElementById('adminModalBar').style.width = `${p}%`;
+
+    // Imagen
+    const urlInput = document.getElementById('adminEventImageUrl');
+    const fileInput = document.getElementById('adminEventImageFile');
+    const btnSave = document.getElementById('btnSaveImage');
+
+    urlInput.value = ev.image || '';
+    document.getElementById('adminEventImagePreview').src = 
+        ev.image || 'https://via.placeholder.com/300x200?text=Sin+Imagen';
+
+    btnSave.onclick = async () => {
+        const original = btnSave.innerHTML;
+        btnSave.innerText = "Guardando...";
+        btnSave.disabled = true;
+
+        let finalImage = urlInput.value;
+
+        if (fileInput.files[0]) {
+            finalImage = await toBase64(fileInput.files[0]);
         }
 
-        const tbody = document.getElementById('guestListBody');
-        if(tbody) {
-            tbody.innerHTML = '';
-            const limit = Math.min(ev.enrolledCount || 0, 5);
-            if(limit === 0) tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-gray-400 text-sm">Sin inscritos</td></tr>';
-            else {
-                for(let i=1; i<=limit; i++) tbody.innerHTML += `<tr class="border-b border-gray-50"><td class="px-4 py-2 text-sm text-gray-900">Invitado ${i}</td><td class="px-4 py-2 text-sm text-gray-500">user${i}@mail.com</td><td class="px-4 py-2 text-right text-sm text-gray-500">#TICKET-${1000+i}</td></tr>`;
-            }
-        }
-        modal.classList.remove('hidden');
-    }
+        await db.collection("events").doc(ev.id).update({ image: finalImage });
+
+        alert("Imagen guardada");
+        loadAdminDashboard();
+
+        btnSave.innerHTML = original;
+        btnSave.disabled = false;
+    };
+
+    // 🚀 *CARGAR ASISTENTES REALES DESDE FIREBASE*
+    loadEventAttendees(ev.id);
+
+    modal.classList.remove('hidden');
+}
 
     const toBase64 = file => new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -411,97 +425,97 @@ document.addEventListener('DOMContentLoaded', () => {
     // 6. MODALES DE CREACIÓN (LÓGICA SEGURA Y SIN BLOQUEOS)
     // =====================================================
     
-    const setupCreateModal = (btnId, modalId, formId, userType) => {
-        const btn = document.getElementById(btnId);
-        const modal = document.getElementById(modalId);
-        const form = document.getElementById(formId);
-        
-        if (btn && modal) btn.addEventListener('click', () => modal.classList.remove('hidden'));
-        if (modal) {
-            // Cerrar con cualquier botón que tenga 'close' o 'cancel' en su ID
-            const closeButtons = modal.querySelectorAll('button[id*="close"], button[id*="cancel"]');
-            closeButtons.forEach(b => b.onclick = () => modal.classList.add('hidden'));
-        }
-        
-        if (form) {
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const submitBtn = form.querySelector('button[type="submit"]');
-                const originalText = submitBtn.innerText;
-                
-                // 1. Bloquear para evitar doble envío
-                submitBtn.innerText = "Procesando...";
-                submitBtn.disabled = true;
-                submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+const setupCreateModal = (btnId, modalId, formId, userType) => {
+    const btn = document.getElementById(btnId);
+    const modal = document.getElementById(modalId);
+    const form = document.getElementById(formId);
 
-                try {
-                    // Recoger datos con IDs específicos según el modal (usuario o visitante)
-                    const prefix = userType === 'user' ? 'userEvent' : 'modalEvent';
-                    
-                    // Nota: Los inputs deben tener los IDs correctos en el HTML (ej: userEventName o modalEventName)
-                    const nameVal = document.getElementById(`${prefix}Name`).value;
-                    const dateVal = document.getElementById(`${prefix}Date`).value;
-                    const timeVal = document.getElementById(`${prefix}Time`).value;
-                    const capVal = document.getElementById(`${prefix}Cap`).value;
-                    const locVal = document.getElementById(`${prefix}Loc`).value;
-                    const descVal = document.getElementById(`${prefix}Desc`).value;
+    if (btn && modal) {
+        btn.addEventListener("click", () => modal.classList.remove("hidden"));
+    }
 
-                    const eventData = {
-                        name: nameVal,
-                        date: dateVal,
-                        time: timeVal,
-                        capacity: parseInt(capVal),
-                        location: locVal,
-                        description: descVal,
-                    };
+    if (modal) {
+        const closeButtons = modal.querySelectorAll(
+            "button[id*='close'], button[id*='cancel']"
+        );
+        closeButtons.forEach((b) => (b.onclick = () => modal.classList.add("hidden")));
+    }
 
-                    // --- CASO VISITANTE ---
-                    if (userType === 'visitor') {
-                        const emailInput = document.getElementById('modalOrganizerEmail').value.trim();
-                        // Normalizar email
-                        const cleanEmail = emailInput.toLowerCase();
-                        
-                        console.log("Verificando:", cleanEmail);
-                        const existingUser = await getUserByEmailDB(cleanEmail);
+    if (form) {
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
 
-                        if (existingUser) {
-                            // Éxito: Crear evento
-                            eventData.organizerId = existingUser.id;
-                            eventData.organizerEmail = existingUser.email;
-                            await createEventDB(eventData);
-                            
-                            alert(`¡Solicitud enviada con éxito!\n\nEvento asociado a: ${cleanEmail}`);
-                            modal.classList.add('hidden');
-                            form.reset();
-                        } else {
-                            // Fallo: Usuario no existe
-                            alert(`El correo ${cleanEmail} NO está registrado.\n\nDebes registrarte primero.`);
-                            window.location.href = 'registro.html';
-                        }
-                    } 
-                    // --- CASO USUARIO ---
-                    else {
-                        await createEventDB(eventData);
-                        alert("¡Evento creado exitosamente!");
-                        modal.classList.add('hidden');
-                        form.reset();
-                        if (auth.currentUser) loadUserDashboard(auth.currentUser);
+            const submitBtn = form.querySelector("button[type='submit']");
+            const originalText = submitBtn.innerText;
+            submitBtn.innerText = "Procesando...";
+            submitBtn.disabled = true;
+            submitBtn.classList.add("opacity-50", "cursor-not-allowed");
+
+            try {
+                // 🔥 OBTENER CAMPOS SEGÚN TU HTML (YA VALIDADO)
+                const nameVal = document.getElementById("modalEventName").value.trim();
+                const dateVal = document.getElementById("modalEventDate").value.trim();
+                const timeVal = document.getElementById("modalEventTime").value.trim();
+                const capVal = document.getElementById("modalEventCapacity").value.trim();
+                const locVal = document.getElementById("modalEventLocation").value.trim();
+                const descVal = document.getElementById("modalEventDescription").value.trim();
+
+                if (!nameVal || !dateVal || !timeVal || !capVal || !locVal || !descVal) {
+                    throw new Error("Campos vacíos");
+                }
+
+                const eventData = {
+                    name: nameVal,
+                    date: dateVal,
+                    time: timeVal,
+                    capacity: parseInt(capVal),
+                    location: locVal,
+                    description: descVal,
+                };
+
+                // 🔥 CASO VISITANTE
+                if (userType === "visitor") {
+                    const emailInput = document.getElementById("modalOrganizerEmail");
+                    const cleanEmail = emailInput.value.trim().toLowerCase();
+                    const existingUser = await getUserByEmailDB(cleanEmail);
+
+                    if (!existingUser) {
+                        alert(`El correo ${cleanEmail} no está registrado.`);
+                        window.location.href = "registro.html";
+                        return;
                     }
 
-                } catch (error) {
-                    console.error(error);
-                    // Mensajes amigables
-                    if(error.message.includes("reading 'value'")) alert("Error: Faltan campos por completar.");
-                    else alert("Ocurrió un error: " + error.message);
-                } finally {
-                    // 2. SIEMPRE RESTAURAR EL BOTÓN (CRÍTICO PARA NO QUEDAR PEGADO)
-                    submitBtn.innerText = originalText;
-                    submitBtn.disabled = false;
-                    submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    eventData.organizerId = existingUser.id;
+                    eventData.organizerEmail = existingUser.email;
+
+                    await createEventDB(eventData);
+                    alert("¡Solicitud enviada correctamente!");
+                    modal.classList.add("hidden");
+                    form.reset();
+                    return;
                 }
-            });
-        }
-    };
+
+                // 🔥 CASO USUARIO LOGUEADO
+                await createEventDB(eventData);
+                alert("¡Evento creado exitosamente!");
+                modal.classList.add("hidden");
+                form.reset();
+
+                if (auth.currentUser) {
+                    loadUserDashboard(auth.currentUser);
+                }
+
+            } catch (error) {
+                console.error(error);
+                alert("Error: Faltan campos por completar.");
+            } finally {
+                submitBtn.innerText = originalText;
+                submitBtn.disabled = false;
+                submitBtn.classList.remove("opacity-50", "cursor-not-allowed");
+            }
+        });
+    }
+};
 
     setupCreateModal('btn-organize', 'organizeModal', 'modalCreateEventForm', 'visitor');
     setupCreateModal('btn-create-event-user', 'userOrganizeModal', 'userCreateEventForm', 'user');
@@ -538,23 +552,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 events.forEach(ev => {
-                    const img = ev.image || `https://source.unsplash.com/800x600/?tech,${ev.name}`;
-                    eventsContainer.innerHTML += `
-                    <div class="card-pro rounded-2xl overflow-hidden flex flex-col h-full bg-white shadow hover:shadow-lg transition">
-                        <div class="relative h-56 bg-gray-200 group">
-                            <img src="${img}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" onerror="this.src='https://via.placeholder.com/800x600?text=Evento'">
-                            <div class="absolute bottom-4 left-4 text-white font-bold text-xl shadow-black drop-shadow-md">${ev.name}</div>
-                        </div>
-                        <div class="p-6 flex flex-col flex-grow">
-                            <div class="mb-4 text-gray-600 text-sm space-y-1">
-                                <div>📅 ${ev.date}</div>
-                                <div>📍 ${ev.location}</div>
-                            </div>
-                            <button onclick="window.location.href='inscripcion.html?evento=${encodeURIComponent(ev.name)}'" class="btn-subscribe w-full py-2 bg-brand-green text-white rounded font-bold">Inscribirse</button>
-                        </div>
-                    </div>`;
-                });
+    const img = ev.image || `https://source.unsplash.com/800x600/?tech,${ev.name}`;
+
+    eventsContainer.innerHTML += `
+    <div class="card-pro rounded-2xl overflow-hidden flex flex-col h-full bg-white shadow hover:shadow-lg transition">
+        <div class="relative h-56 bg-gray-200 group">
+            <img src="${img}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" 
+                 onerror="this.src='https://via.placeholder.com/800x600?text=Evento'">
+            <div class="absolute bottom-4 left-4 text-white font-bold text-xl shadow-black drop-shadow-md">
+                ${ev.name}
+            </div>
+        </div>
+
+        <div class="p-6 flex flex-col flex-grow">
+            <div class="mb-4 text-gray-600 text-sm space-y-1">
+                <div>📅 ${ev.date}</div>
+                <div>📍 ${ev.location}</div>
+            </div>
+
+            <button 
+                onclick="window.location.href='inscripcion.html?eventId=${ev.id}'" 
+                class="btn-subscribe w-full py-2 bg-brand-green text-white rounded font-bold">
+                Inscribirse
+            </button>
+        </div>
+    </div>`;
+});
             } catch(e) { console.error("Error carga pública:", e); }
         })();
     }
 });
+async function loadEventAttendees(eventId) {
+    const tbody = document.getElementById("guestListBody");
+    if (!tbody) return;
+
+    const guests = await getEventGuestsDB(eventId);
+
+    tbody.innerHTML = "";
+
+    if (guests.length === 0) {
+        tbody.innerHTML =
+            '<tr><td colspan="3" class="text-center py-4 text-gray-400 text-sm">No hay asistentes registrados.</td></tr>';
+        return;
+    }
+
+    guests.forEach((g, i) => {
+        tbody.innerHTML += `
+            <tr class="border-b border-gray-50">
+                <td class="px-4 py-2 text-sm text-gray-900">${g.name} ${g.lastName}</td>
+                <td class="px-4 py-2 text-sm text-gray-600">${g.email}</td>
+                <td class="px-4 py-2 text-right text-sm text-gray-500">#TICKET-${1000 + i}</td>
+            </tr>`;
+    });
+}
