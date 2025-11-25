@@ -434,88 +434,107 @@ const setupCreateModal = (btnId, modalId, formId, userType) => {
         btn.addEventListener("click", () => modal.classList.remove("hidden"));
     }
 
+    // Cerrar modal
     if (modal) {
-        const closeButtons = modal.querySelectorAll(
-            "button[id*='close'], button[id*='cancel']"
-        );
-        closeButtons.forEach((b) => (b.onclick = () => modal.classList.add("hidden")));
+        const closeButtons = modal.querySelectorAll("button[id*='close'], button[id*='cancel']");
+        closeButtons.forEach(btn => btn.onclick = () => modal.classList.add("hidden"));
     }
 
-    if (form) {
-        form.addEventListener("submit", async (e) => {
-            e.preventDefault();
+    if (!form) return;
 
-            const submitBtn = form.querySelector("button[type='submit']");
-            const originalText = submitBtn.innerText;
-            submitBtn.innerText = "Procesando...";
-            submitBtn.disabled = true;
-            submitBtn.classList.add("opacity-50", "cursor-not-allowed");
+    form.addEventListener("submit", async (e) => {
+        e.preventDefault();
 
-            try {
-                // 🔥 OBTENER CAMPOS SEGÚN TU HTML (YA VALIDADO)
-                const nameVal = document.getElementById("modalEventName").value.trim();
-                const dateVal = document.getElementById("modalEventDate").value.trim();
-                const timeVal = document.getElementById("modalEventTime").value.trim();
-                const capVal = document.getElementById("modalEventCapacity").value.trim();
-                const locVal = document.getElementById("modalEventLocation").value.trim();
-                const descVal = document.getElementById("modalEventDescription").value.trim();
+        const submitBtn = form.querySelector("button[type='submit']");
+        const originalText = submitBtn.innerText;
 
-                if (!nameVal || !dateVal || !timeVal || !capVal || !locVal || !descVal) {
-                    throw new Error("Campos vacíos");
-                }
+        submitBtn.innerText = "Procesando...";
+        submitBtn.disabled = true;
 
-                const eventData = {
-                    name: nameVal,
-                    date: dateVal,
-                    time: timeVal,
-                    capacity: parseInt(capVal),
-                    location: locVal,
-                    description: descVal,
-                };
+        try {
 
-                // 🔥 CASO VISITANTE
-                if (userType === "visitor") {
-                    const emailInput = document.getElementById("modalOrganizerEmail");
-                    const cleanEmail = emailInput.value.trim().toLowerCase();
-                    const existingUser = await getUserByEmailDB(cleanEmail);
+            let nameVal, dateVal, timeVal, capVal, locVal, descVal;
 
-                    if (!existingUser) {
-                        alert(`El correo ${cleanEmail} no está registrado.`);
-                        window.location.href = "registro.html";
-                        return;
-                    }
+            // =============================================================
+            //  👉 CAMPOS SEGÚN TIPO DE USUARIO
+            // =============================================================
+            if (userType === "visitor") {
+                nameVal = document.getElementById("modalEventName").value.trim();
+                dateVal = document.getElementById("modalEventDate").value.trim();
+                timeVal = document.getElementById("modalEventTime").value.trim();
+                capVal = document.getElementById("modalEventCapacity").value.trim();
+                locVal = document.getElementById("modalEventLocation").value.trim();
+                descVal = document.getElementById("modalEventDescription").value.trim();
+            } 
+            else if (userType === "user") {
+                nameVal = document.getElementById("userEventName").value.trim();
+                dateVal = document.getElementById("userEventDate").value.trim();
+                timeVal = document.getElementById("userEventTime").value.trim();
+                capVal = document.getElementById("userEventCap").value.trim();
+                locVal = document.getElementById("userEventLoc").value.trim();
+                descVal = document.getElementById("userEventDesc").value.trim();
+            }
 
-                    eventData.organizerId = existingUser.id;
-                    eventData.organizerEmail = existingUser.email;
+            // VALIDACIÓN
+            if (!nameVal || !dateVal || !timeVal || !capVal || !locVal) {
+                throw new Error("Campos vacíos");
+            }
 
-                    await createEventDB(eventData);
-                    alert("¡Solicitud enviada correctamente!");
-                    modal.classList.add("hidden");
-                    form.reset();
+            const eventData = {
+                name: nameVal,
+                date: dateVal,
+                time: timeVal,
+                capacity: parseInt(capVal),
+                location: locVal,
+                description: descVal || ""
+            };
+
+            // =============================================================
+            //  👉 VISITANTE (ORGANIZADOR EXTERNO)
+            // =============================================================
+            if (userType === "visitor") {
+
+                const emailInput = document.getElementById("modalOrganizerEmail");
+                const cleanEmail = emailInput.value.trim().toLowerCase();
+                const existingUser = await getUserByEmailDB(cleanEmail);
+
+                if (!existingUser) {
+                    alert(`El correo ${cleanEmail} no está registrado.`);
+                    window.location.href = "registro.html";
                     return;
                 }
 
-                // 🔥 CASO USUARIO LOGUEADO
+                eventData.organizerId = existingUser.id;
+                eventData.organizerEmail = existingUser.email;
                 await createEventDB(eventData);
-                alert("¡Evento creado exitosamente!");
-                modal.classList.add("hidden");
-                form.reset();
-
-                if (auth.currentUser) {
-                    loadUserDashboard(auth.currentUser);
-                }
-
-            } catch (error) {
-                console.error(error);
-                alert("Error: Faltan campos por completar.");
-            } finally {
-                submitBtn.innerText = originalText;
-                submitBtn.disabled = false;
-                submitBtn.classList.remove("opacity-50", "cursor-not-allowed");
             }
-        });
-    }
+
+            // =============================================================
+            //  👉 USUARIO LOGUEADO
+            // =============================================================
+            if (userType === "user") {
+                const user = auth.currentUser;
+                eventData.organizerId = user.uid;
+                eventData.organizerEmail = user.email;
+
+                await createEventDB(eventData);
+                await loadUserDashboard(user);
+            }
+
+            alert("¡Evento creado exitosamente!");
+            modal.classList.add("hidden");
+            form.reset();
+
+        } catch (err) {
+            console.error(err);
+            alert("Error: Faltan campos por completar.");
+        } finally {
+            submitBtn.innerText = originalText;
+            submitBtn.disabled = false;
+        }
+    });
 };
+
 
     setupCreateModal('btn-organize', 'organizeModal', 'modalCreateEventForm', 'visitor');
     setupCreateModal('btn-create-event-user', 'userOrganizeModal', 'userCreateEventForm', 'user');
@@ -605,3 +624,43 @@ async function loadEventAttendees(eventId) {
             </tr>`;
     });
 }
+// ===============================
+// CIERRE DEL MODAL DE CAPACIDAD
+// ===============================
+
+document.addEventListener("DOMContentLoaded", () => {
+
+    const capacityModal = document.getElementById("capacityModal");
+    const closeX = document.getElementById("closeModal");
+    const closeBtn = document.getElementById("closeModalBtn");
+
+    // Función reutilizable para cerrar
+    const closeCapacityModal = () => {
+        if (capacityModal) {
+            capacityModal.classList.add("opacity-0");
+            setTimeout(() => {
+                capacityModal.classList.add("hidden");
+                capacityModal.classList.remove("opacity-0");
+            }, 200);
+        }
+    };
+
+    // Cerrar con X
+    if (closeX) {
+        closeX.addEventListener("click", closeCapacityModal);
+    }
+
+    // Cerrar con botón "Cerrar"
+    if (closeBtn) {
+        closeBtn.addEventListener("click", closeCapacityModal);
+    }
+
+    // Cerrar si clickea fuera del modal (opcional)
+    if (capacityModal) {
+        capacityModal.addEventListener("click", (e) => {
+            if (e.target === capacityModal) {
+                closeCapacityModal();
+            }
+        });
+    }
+});
